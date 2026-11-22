@@ -4,10 +4,11 @@ import {
   CircleHelp, Clock3, Droplets, LayoutDashboard, LogOut, Menu, MessageSquareWarning,
   PackageCheck, Plus, Search, Shirt, Sparkles, Users, WashingMachine, X,
 } from 'lucide-react'
-import { statusSteps, students } from './data/initialData.js'
+import { statusSteps } from './data/initialData.js'
 import { useLaundry } from './context/LaundryContext.jsx'
+import { STAFF_EMAIL, normalizeEmail } from './services/authService.js'
+import { isValidEmail, validateRegistration } from './services/registrationValidation.js'
 
-const studentUser = students[0]
 const dateLabel = (value) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : '—'
 const fullDate = (value) => value ? new Date(`${value}T12:00:00`).toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric' }) : '—'
 const initials = (name) => name.split(' ').map((part) => part[0]).slice(0, 2).join('')
@@ -38,29 +39,79 @@ function Modal({ title, eyebrow, onClose, children, wide = false }) {
   )
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, onRegister }) {
+  const [activeTab, setActiveTab] = useState('signin')
   const [role, setRole] = useState('student')
   const [email, setEmail] = useState('ananya.sen@campus.edu')
   const [password, setPassword] = useState('')
+  const [registration, setRegistration] = useState({ name: '', email: '', hostel: '', roomNumber: '', password: '', confirmPassword: '' })
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault()
-    if (!email.includes('@') || !password.trim()) {
-      setError('Enter your campus email and password to continue.')
+    setError('')
+    setSuccess('')
+    if (!isValidEmail(email) || !password) {
+      setError('Enter a valid campus email and password to continue.')
       return
     }
-    if (role === 'student' && !students.some((student) => student.email === email)) {
-      setError('No demo student found for that email. Try the demo account below.')
-      return
+    setBusy(true)
+    try {
+      await onLogin({ role, email, password })
+    } catch (loginError) {
+      setError(loginError.message || 'We could not sign you in. Please try again.')
+    } finally {
+      setBusy(false)
     }
-    onLogin(role)
   }
 
   function switchRole(nextRole) {
     setRole(nextRole)
-    setEmail(nextRole === 'student' ? studentUser.email : 'laundry@campus.edu')
+    setEmail(nextRole === 'student' ? 'ananya.sen@campus.edu' : STAFF_EMAIL)
+    setPassword('')
     setError('')
+    setSuccess('')
+  }
+
+  function switchTab(nextTab) {
+    setActiveTab(nextTab)
+    setError('')
+    setSuccess('')
+    if (nextTab === 'create') {
+      setRole('student')
+      setRegistration((current) => ({ ...current, email: '' }))
+    }
+  }
+
+  function updateRegistration(field, value) {
+    setRegistration((current) => ({ ...current, [field]: value }))
+    setError('')
+  }
+
+  async function submitRegistration(event) {
+    event.preventDefault()
+    const validationError = validateRegistration(registration)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setError('')
+    setBusy(true)
+    try {
+      await onRegister(registration)
+      setEmail(normalizeEmail(registration.email))
+      setPassword('')
+      setRole('student')
+      setSuccess('Your Washday account is ready. Sign in with your new email and password.')
+      setActiveTab('signin')
+      setRegistration({ name: '', email: '', hostel: '', roomNumber: '', password: '', confirmPassword: '' })
+    } catch (registrationError) {
+      setError(registrationError.message || 'We could not create your account. Please try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -76,18 +127,38 @@ function Login({ onLogin }) {
         <div className="login-form-wrap">
           <div className="eyebrow">WELCOME TO WASHDAY</div>
           <h1>Good laundry<br />starts here.</h1>
-          <p className="muted login-intro">Sign in to manage your campus laundry.</p>
-          <div className="role-switch" aria-label="Choose portal">
-            <button className={role === 'student' ? 'selected' : ''} onClick={() => switchRole('student')}><Users size={16} /> Student</button>
-            <button className={role === 'staff' ? 'selected' : ''} onClick={() => switchRole('staff')}><WashingMachine size={16} /> Laundry staff</button>
+          <p className="muted login-intro">{activeTab === 'signin' ? 'Sign in to manage your campus laundry.' : 'Create your student account to get started.'}</p>
+          <div className="auth-tabs" role="tablist" aria-label="Account options">
+            <button type="button" role="tab" aria-selected={activeTab === 'signin'} className={activeTab === 'signin' ? 'selected' : ''} onClick={() => switchTab('signin')}>Sign In</button>
+            <button type="button" role="tab" aria-selected={activeTab === 'create'} className={activeTab === 'create' ? 'selected' : ''} onClick={() => switchTab('create')}>Create Account</button>
           </div>
-          <form onSubmit={submit} className="login-fields">
-            <label>Campus email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@campus.edu" /></label>
-            <label>Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" /></label>
-            {error && <div className="form-error">{error}</div>}
-            <button className="button button-primary button-full" type="submit">Sign in <ArrowRight size={17} /></button>
-          </form>
-          <div className="demo-hint"><span className="demo-icon"><Sparkles size={15} /></span><span><strong>Just exploring?</strong> Use any password with the prefilled demo account.</span></div>
+          {activeTab === 'signin' ? <>
+            <div className="role-switch" aria-label="Choose sign-in portal">
+              <button type="button" className={role === 'student' ? 'selected' : ''} onClick={() => switchRole('student')}><Users size={16} /> Student</button>
+              <button type="button" className={role === 'staff' ? 'selected' : ''} onClick={() => switchRole('staff')}><WashingMachine size={16} /> Laundry staff</button>
+            </div>
+            <form onSubmit={submit} className="login-fields" noValidate>
+              <label>Campus email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@campus.edu" required /></label>
+              <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required /></label>
+              {error && <div className="form-error" role="alert">{error}</div>}
+              {success && <div className="form-success" role="status">{success}</div>}
+              <button className="button button-primary button-full" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'} <ArrowRight size={17} /></button>
+            </form>
+            <div className="demo-hint"><span className="demo-icon"><Sparkles size={15} /></span><span><strong>Demo account?</strong> Seeded student accounts and the staff demo still accept any non-empty password.</span></div>
+          </> : <>
+            <form onSubmit={submitRegistration} className="login-fields registration-fields" noValidate>
+              <label>Full name<input type="text" autoComplete="name" value={registration.name} onChange={(event) => updateRegistration('name', event.target.value)} placeholder="Your full name" required /></label>
+              <label>Campus email<input type="email" autoComplete="email" value={registration.email} onChange={(event) => updateRegistration('email', event.target.value)} placeholder="you@campus.edu" required /></label>
+              <div className="registration-row">
+                <label>Hostel name<input type="text" autoComplete="organization" value={registration.hostel} onChange={(event) => updateRegistration('hostel', event.target.value)} placeholder="e.g. Maple Hall" required /></label>
+                <label>Room number<input type="text" value={registration.roomNumber} onChange={(event) => updateRegistration('roomNumber', event.target.value)} placeholder="e.g. 204" required /></label>
+              </div>
+              <label>Password<input type="password" autoComplete="new-password" value={registration.password} onChange={(event) => updateRegistration('password', event.target.value)} placeholder="Create a strong password" required /><small className="password-hint">8+ characters, upper and lowercase, number, and symbol.</small></label>
+              <label>Confirm password<input type="password" autoComplete="new-password" value={registration.confirmPassword} onChange={(event) => updateRegistration('confirmPassword', event.target.value)} placeholder="Enter your password again" required /></label>
+              {error && <div className="form-error" role="alert">{error}</div>}
+              <button className="button button-primary button-full" type="submit" disabled={busy}>{busy ? 'Creating account…' : 'Create student account'} <ArrowRight size={17} /></button>
+            </form>
+          </>}
         </div>
       </div>
       <div className="login-bottom">A calmer laundry day, right on campus <span>·</span> Demo environment</div>
@@ -95,7 +166,7 @@ function Login({ onLogin }) {
   )
 }
 
-function Sidebar({ role, page, setPage, onLogout, open, onClose, unread }) {
+function Sidebar({ role, student, page, setPage, onLogout, open, onClose, unread }) {
   const studentLinks = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'requests', label: 'My laundry', icon: Shirt },
@@ -110,7 +181,7 @@ function Sidebar({ role, page, setPage, onLogout, open, onClose, unread }) {
     { id: 'schedule', label: 'Collection schedule', icon: CalendarDays },
   ]
   const links = role === 'staff' ? staffLinks : studentLinks
-  const user = role === 'staff' ? { name: 'Laundry team', detail: 'Staff portal', initials: 'LT', color: 'blue' } : studentUser
+  const user = role === 'staff' ? { name: 'Laundry team', detail: 'Staff portal', initials: 'LT', color: 'blue' } : student
   return (
     <>
       {open && <button className="sidebar-scrim" onClick={onClose} aria-label="Close menu" />}
@@ -143,7 +214,7 @@ function PageHeader({ title, description, action, eyebrow }) {
 }
 
 function RequestTable({ requests, staff, onOpen, compact = false }) {
-  const people = students
+  const { students: people } = useLaundry()
   if (!requests.length) return <div className="empty-state"><span className="empty-icon"><Shirt size={23} /></span><strong>No laundry here yet</strong><p>When you submit a request, it will show up here.</p></div>
   return (
     <div className="table-scroll">
@@ -197,6 +268,7 @@ function StudentOverview({ requests, notifications, onOpen, onPage, onNew }) {
 }
 
 function StaffOverview({ requests, onOpen, onPage }) {
+  const { complaints } = useLaundry()
   const pending = requests.filter((item) => item.status === 'Received').length
   const processing = requests.filter((item) => ['Sorting', 'Washing', 'Drying'].includes(item.status)).length
   const ready = requests.filter((item) => item.status === 'Ready for Collection').length
@@ -211,7 +283,7 @@ function StaffOverview({ requests, onOpen, onPage }) {
         <MetricCard label="Ready to collect" value={ready} note="Awaiting student pickup" icon={PackageCheck} tone="green" />
         <MetricCard label="Completed" value={completed} note="Collected by students" icon={CheckCheck} tone="purple" />
       </div>
-      <div className="staff-shortcuts"><button onClick={() => onPage('requests')}><span className="shortcut-icon"><Shirt size={18} /></span><span><strong>Manage requests</strong><small>Update status and return dates</small></span><ArrowRight size={16} /></button><button onClick={() => onPage('complaints')}><span className="shortcut-icon shortcut-warm"><MessageSquareWarning size={18} /></span><span><strong>Review complaints</strong><small>Follow up on student concerns</small></span><ArrowRight size={16} /></button></div>
+      <div className="staff-shortcuts"><button onClick={() => onPage('requests')}><span className="shortcut-icon"><Shirt size={18} /></span><span><strong>Manage requests</strong><small>Update status and return dates</small></span><ArrowRight size={16} /></button><button onClick={() => onPage('complaints')}><span className="shortcut-icon shortcut-warm"><MessageSquareWarning size={18} /></span><span><strong>Review complaints</strong><small>{complaints.filter((item) => item.status !== 'Resolved').length} open student concerns</small></span><ArrowRight size={16} /></button></div>
       <div className="section-heading"><div><h2>Latest requests</h2><p>Recently submitted laundry from students.</p></div><button className="text-button" onClick={() => onPage('requests')}>All requests <ArrowRight size={15} /></button></div>
       <div className="panel"><RequestTable requests={latest} staff onOpen={onOpen} compact /></div>
     </>
@@ -219,10 +291,11 @@ function StaffOverview({ requests, onOpen, onPage }) {
 }
 
 function RequestList({ requests, role, onOpen }) {
+  const { students: people } = useLaundry()
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('All status')
   const filtered = requests.filter((request) => {
-    const person = students.find((student) => student.id === request.studentId)
+    const person = people.find((student) => student.id === request.studentId)
     const matchesText = `${request.token} ${person?.name || ''} ${request.items.map((item) => item.type).join(' ')}`.toLowerCase().includes(query.toLowerCase())
     return matchesText && (filter === 'All status' || request.status === filter)
   })
@@ -244,7 +317,7 @@ function NotificationsPage({ notifications, onRead, onOpen }) {
 }
 
 function ComplaintsPage({ role, complaints, onNew, onUpdate }) {
-  const people = students
+  const { students: people } = useLaundry()
   const openCount = complaints.filter((item) => item.status !== 'Resolved').length
   return <>
     <PageHeader title={role === 'staff' ? 'Complaints' : 'Help & complaints'} description={role === 'staff' ? 'Keep track of student concerns and follow-ups.' : 'Something not quite right? Let our team know.'} action={role === 'student' && <button className="button button-primary" onClick={onNew}><Plus size={16} /> Report an issue</button>} />
@@ -265,7 +338,7 @@ function SchedulePage({ schedules, role, onAdd, onRemove }) {
 }
 
 function RequestModal({ request, role, onClose, onComplaint, onStatus, onDate, onCollect }) {
-  const people = students
+  const { students: people } = useLaundry()
   const student = people.find((item) => item.id === request.studentId)
   const currentStep = statusSteps.indexOf(request.status)
   const totalItems = request.items.reduce((sum, item) => sum + Number(item.quantity), 0)
@@ -289,7 +362,7 @@ function RequestModal({ request, role, onClose, onComplaint, onStatus, onDate, o
   </Modal>
 }
 
-function FormModal({ type, onClose, onSubmit }) {
+function FormModal({ type, student, onClose, onSubmit }) {
   const [quantities, setQuantities] = useState({ Shirts: 0, Trousers: 0, Jeans: 0, Dresses: 0, Tops: 0, Towels: 0, Bedsheets: 0, Kurtas: 0 })
   const [expectedDate, setExpectedDate] = useState(() => { const date = new Date(); date.setDate(date.getDate() + 3); return date.toISOString().slice(0, 10) })
   const [notes, setNotes] = useState('')
@@ -301,7 +374,7 @@ function FormModal({ type, onClose, onSubmit }) {
   const [location, setLocation] = useState('Laundry room · Ground floor')
   const [slotNote, setSlotNote] = useState('Morning drop-off')
   const { requests } = useLaundry()
-  const eligible = requests.filter((request) => request.studentId === studentUser.id)
+  const eligible = requests.filter((request) => request.studentId === student?.id)
   const total = Object.values(quantities).reduce((sum, value) => sum + Number(value), 0)
   const title = type === 'request' ? 'Start a laundry request' : type === 'complaint' ? 'Tell us what happened' : 'Add a collection time'
   function submit(event) {
@@ -343,27 +416,31 @@ function FormModal({ type, onClose, onSubmit }) {
 
 export default function App() {
   const store = useLaundry()
-  const [role, setRole] = useState('student')
-  const [signedIn, setSignedIn] = useState(false)
+  const session = store.session
+  const role = session?.role
+  const activeStudent = role === 'student' ? store.students.find((student) => student.id === session.studentId) : null
   const [page, setPage] = useState('overview')
   const [modal, setModal] = useState('')
   const [selectedRequest, setSelectedRequest] = useState(null)
   const [mobileNav, setMobileNav] = useState(false)
   const [toast, setToast] = useState('')
-  const myRequests = useMemo(() => role === 'staff' ? store.requests : store.requests.filter((item) => item.studentId === studentUser.id), [role, store.requests])
-  const myNotifications = store.notifications.filter((item) => role === 'staff' || item.studentId === studentUser.id)
-  const myComplaints = role === 'staff' ? store.complaints : store.complaints.filter((item) => item.studentId === studentUser.id)
+  const myRequests = useMemo(() => role === 'staff' ? store.requests : store.requests.filter((item) => item.studentId === activeStudent?.id), [role, activeStudent?.id, store.requests])
+  const myNotifications = store.notifications.filter((item) => role === 'staff' || item.studentId === activeStudent?.id)
+  const myComplaints = role === 'staff' ? store.complaints : store.complaints.filter((item) => item.studentId === activeStudent?.id)
   const unread = myNotifications.filter((item) => !item.read).length
 
   function notify(message) {
     setToast(message)
     window.setTimeout(() => setToast(''), 2800)
   }
-  function setPortal(nextRole) {
-    setRole(nextRole)
+
+  function handleLogout() {
+    store.signOut()
     setPage('overview')
     setSelectedRequest(null)
+    setModal('')
   }
+
   function openRequest(request) {
     if (typeof request === 'string') {
       const match = store.requests.find((item) => item.id === request)
@@ -374,11 +451,11 @@ export default function App() {
   }
   function submitModal(payload) {
     if (modal === 'request') {
-      const request = store.createRequest({ ...payload, studentId: studentUser.id })
+      const request = store.createRequest({ ...payload, studentId: session.studentId })
       setSelectedRequest(request)
       notify(`Request ${request.token} created`)
     } else if (modal === 'complaint') {
-      store.addComplaint({ ...payload, studentId: studentUser.id })
+      store.addComplaint({ ...payload, studentId: session.studentId })
       notify('Your report has been sent to the laundry team')
     } else {
       store.addSchedule(payload)
@@ -403,7 +480,16 @@ export default function App() {
     notify('Collection confirmed. Enjoy your fresh laundry!')
   }
 
-  if (!signedIn) return <Login onLogin={(nextRole) => { setPortal(nextRole); setSignedIn(true) }} />
+  if (!session || (role === 'student' && !activeStudent)) {
+    return <Login
+      onLogin={async (credentials) => {
+        const nextSession = await store.signIn(credentials)
+        setPage('overview')
+        return nextSession
+      }}
+      onRegister={store.registerStudent}
+    />
+  }
 
   let title = page
   if (page === 'overview') title = role === 'staff' ? 'Overview' : 'Your laundry space'
@@ -414,9 +500,9 @@ export default function App() {
   else if (page === 'schedule') title = 'Collection schedule'
 
   return <div className="app-shell">
-    <Sidebar role={role} page={page} setPage={setPage} onLogout={() => setSignedIn(false)} open={mobileNav} onClose={() => setMobileNav(false)} unread={unread} />
+    <Sidebar role={role} student={activeStudent} page={page} setPage={setPage} onLogout={handleLogout} open={mobileNav} onClose={() => setMobileNav(false)} unread={unread} />
     <main className="main-area">
-      <header className="topbar"><button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumbs"><span>Washday</span><span className="breadcrumb-divider">/</span><strong>{title}</strong></div><div className="topbar-actions"><div className="portal-toggle"><button className={role === 'student' ? 'portal-selected' : ''} onClick={() => setPortal('student')}>Student</button><button className={role === 'staff' ? 'portal-selected' : ''} onClick={() => setPortal('staff')}>Staff portal</button></div><button className="topbar-bell" onClick={() => setPage(role === 'staff' ? 'complaints' : 'notifications')} aria-label={role === 'staff' ? 'Complaints' : 'Notifications'}><Bell size={18} />{unread > 0 && role === 'student' && <i />}</button><span className={`avatar top-avatar avatar-${role === 'staff' ? 'blue' : studentUser.color}`}>{role === 'staff' ? 'LT' : studentUser.initials}</span></div></header>
+      <header className="topbar"><button className="icon-button menu-button" onClick={() => setMobileNav(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumbs"><span>Washday</span><span className="breadcrumb-divider">/</span><strong>{title}</strong></div><div className="topbar-actions"><div className="portal-toggle"><span>{role === 'staff' ? 'Laundry staff portal' : 'Student portal'}</span></div><button className="topbar-bell" onClick={() => setPage(role === 'staff' ? 'complaints' : 'notifications')} aria-label={role === 'staff' ? 'Complaints' : 'Notifications'}><Bell size={18} />{unread > 0 && role === 'student' && <i />}</button><span className={`avatar top-avatar avatar-${role === 'staff' ? 'blue' : activeStudent.color}`}>{role === 'staff' ? 'LT' : activeStudent.initials}</span></div></header>
       <div className="page-content">
         {page === 'overview' && (role === 'staff' ? <StaffOverview requests={store.requests} onOpen={openRequest} onPage={setPage} /> : <StudentOverview requests={myRequests} notifications={myNotifications} onOpen={openRequest} onPage={setPage} onNew={() => setModal('request')} />)}
         {page === 'requests' && <RequestList requests={myRequests} role={role} onOpen={openRequest} />}
@@ -428,7 +514,7 @@ export default function App() {
       <footer className="app-footer"><span>Washday <span className="brand-dot">.</span> <i>Thoughtful care, every cycle.</i></span><span>Campus Laundry Services <span>·</span> Demo</span></footer>
     </main>
     {selectedRequest && <RequestModal request={store.requests.find((item) => item.id === selectedRequest.id) || selectedRequest} role={role} onClose={() => setSelectedRequest(null)} onComplaint={() => { setSelectedRequest(null); setModal('complaint') }} onStatus={updateStatus} onDate={updateDate} onCollect={confirmCollection} />}
-    {modal && <FormModal type={modal} onClose={() => setModal('')} onSubmit={submitModal} />}
+    {modal && <FormModal type={modal} student={activeStudent} onClose={() => setModal('')} onSubmit={submitModal} />}
     {toast && <div className="toast"><span><Check size={15} /></span>{toast}</div>}
   </div>
 }

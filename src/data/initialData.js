@@ -21,6 +21,7 @@ const daysFromNow = (days) => {
 }
 
 export const initialData = {
+  students,
   requests: [
     { id: 'r101', token: 'WL-24081', studentId: 's001', submittedAt: daysFromNow(-1), expectedDate: daysFromNow(2), status: 'Washing', items: [{ type: 'Shirts', quantity: 4 }, { type: 'Jeans', quantity: 2 }, { type: 'Towels', quantity: 1 }], notes: 'Please wash the blue shirt separately.' },
     { id: 'r102', token: 'WL-24072', studentId: 's001', submittedAt: daysFromNow(-5), expectedDate: daysFromNow(0), status: 'Ready for Collection', items: [{ type: 'Bedsheets', quantity: 2 }, { type: 'Towels', quantity: 2 }], notes: '' },

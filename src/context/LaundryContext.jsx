@@ -1,18 +1,25 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { initialData, statusSteps } from '../data/initialData.js'
+import { initialData, statusSteps, students as demoStudents } from '../data/initialData.js'
+import {
+  authenticate, clearSession, createCredential, normalizeEmail, readSession,
+  removeCredential, saveCredential, saveSession, STAFF_EMAIL,
+} from '../services/authService.js'
 
 const STORAGE_KEY = 'washday-laundry-data'
 const LaundryContext = createContext(null)
 
 function readData() {
   const saved = localStorage.getItem(STORAGE_KEY)
-  return saved ? JSON.parse(saved) : initialData
+  if (!saved) return initialData
+  const parsed = JSON.parse(saved)
+  return { ...initialData, ...parsed, students: Array.isArray(parsed.students) ? parsed.students : demoStudents }
 }
 
 const newId = (prefix) => `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`
 
 export function LaundryProvider({ children }) {
   const [data, setData] = useState(readData)
+  const [session, setSession] = useState(() => readSession(data.students))
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
@@ -20,6 +27,50 @@ export function LaundryProvider({ children }) {
 
   const value = useMemo(() => ({
     ...data,
+    session,
+    async signIn({ role, email, password }) {
+      const nextSession = await authenticate(role, email, password, data.students)
+      if (!nextSession) throw new Error('Those sign-in details do not match an account.')
+      saveSession(nextSession)
+      setSession(nextSession)
+      return nextSession
+    },
+    async registerStudent({ name, email, hostel, roomNumber, password }) {
+      const normalizedEmail = normalizeEmail(email)
+      if (normalizedEmail === STAFF_EMAIL || data.students.some((item) => normalizeEmail(item.email) === normalizedEmail)) {
+        throw new Error('An account with this campus email already exists.')
+      }
+
+      let studentId
+      do {
+        studentId = newId('s')
+      } while (data.students.some((item) => item.id === studentId))
+      const student = {
+        id: studentId,
+        name: name.trim(),
+        email: normalizedEmail,
+        hostel: hostel.trim(),
+        roomNumber: roomNumber.trim(),
+        room: `${hostel.trim()} · ${roomNumber.trim()}`,
+        initials: name.trim().split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase(),
+        color: ['lavender', 'blue', 'peach', 'mint'][data.students.length % 4],
+      }
+      const credential = await createCredential(studentId, normalizedEmail, password)
+      saveCredential(credential)
+      const updatedData = { ...data, students: [...data.students, student] }
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedData))
+      } catch (error) {
+        removeCredential(studentId)
+        throw error
+      }
+      setData(updatedData)
+      return student
+    },
+    signOut() {
+      clearSession()
+      setSession(null)
+    },
     createRequest({ studentId, items, expectedDate, notes }) {
       let token
       do {
@@ -102,7 +153,7 @@ export function LaundryProvider({ children }) {
     removeSchedule(scheduleId) {
       setData((current) => ({ ...current, schedules: current.schedules.filter((item) => item.id !== scheduleId) }))
     },
-  }), [data])
+  }), [data, session])
 
   return <LaundryContext.Provider value={value}>{children}</LaundryContext.Provider>
 }

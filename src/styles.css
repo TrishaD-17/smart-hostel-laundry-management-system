@@ -61,6 +61,7 @@ button:disabled { cursor: not-allowed; opacity: .48; }
 .portal-toggle { display: flex; align-items: center; padding: 3px; border: 1px solid #e8edf2; border-radius: 8px; background: #f8f9fb; }
 .portal-toggle button { padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: #8390a0; font-size: 10px; font-weight: 600; }
 .portal-toggle .portal-selected { color: #315477; background: white; box-shadow: 0 1px 3px #253c551a; }
+.portal-toggle > span { padding: 6px 9px; color: #56718c; font-size: 10px; font-weight: 600; white-space: nowrap; }
 .topbar-bell { position: relative; width: 30px; height: 32px; display: grid; place-items: center; border: 0; background: transparent; color: #748397; }
 .topbar-bell i { position: absolute; top: 5px; right: 4px; width: 7px; height: 7px; border: 1.5px solid white; border-radius: 50%; background: #e39b69; }
 .top-avatar { width: 30px; height: 30px; }
@@ -300,6 +301,9 @@ td { padding: 11px 14px; border-top: 1px solid #f0f2f5; color: #536477; font-siz
 .login-form-wrap { padding: 53px 43px 32px; }
 .login-form-wrap h1 { margin: 9px 0 7px; color: #293f59; font: 800 27px/1.25 Manrope, sans-serif; letter-spacing: -1px; }
 .login-intro { margin: 0 0 23px; font-size: 10px; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 12px; padding: 4px; border: 1px solid #e9edf2; border-radius: 8px; background: #f8f9fb; }
+.auth-tabs button { min-height: 32px; border: 0; border-radius: 6px; color: #8693a0; background: transparent; font-size: 9px; font-weight: 600; }
+.auth-tabs button.selected { color: #3f5e7d; background: white; box-shadow: 0 1px 4px #253c5517; }
 .role-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border: 1px solid #e9edf2; border-radius: 8px; background: #f8f9fb; }
 .role-switch button { min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 6px; color: #8693a0; background: transparent; font-size: 9px; font-weight: 600; }
 .role-switch button.selected { color: #3f5e7d; background: white; box-shadow: 0 1px 4px #253c5517; }
@@ -308,10 +312,15 @@ td { padding: 11px 14px; border-top: 1px solid #f0f2f5; color: #536477; font-siz
 .login-fields input { min-height: 37px; padding: 9px 10px; border: 1px solid #e5eaf0; border-radius: 6px; outline: 0; color: #52677e; background: white; font-size: 10px; }
 .login-fields input::placeholder { color: #acb5bf; }
 .login-fields .button { min-height: 38px; margin-top: 2px; }
+.registration-fields { gap: 9px; margin-top: 12px; }
+.registration-fields .button { margin-top: 2px; }
+.registration-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.password-hint { margin-top: -2px; color: #99a5b1; font-size: 8px; font-weight: 400; line-height: 1.4; }
 .demo-hint { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px; border: 1px solid #edf0f3; border-radius: 7px; color: #8b98a4; background: #fafbfd; font-size: 8.5px; line-height: 1.5; }
 .demo-hint strong { color: #617589; }
 .demo-icon { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 7px; color: #a0835b; background: #f5f0e7; }
 .form-error { color: #b3665e; font-size: 9px; }
+.form-success { padding: 8px 9px; border: 1px solid #e1ece4; border-radius: 6px; color: #5e806d; background: #f1f7f3; font-size: 9px; line-height: 1.5; }
 .login-bottom { margin-top: 17px; color: #9ba6b1; font-size: 9px; }
 .login-bottom span { padding: 0 5px; color: #c2c9d0; }
 .sidebar-scrim { display: none; }
